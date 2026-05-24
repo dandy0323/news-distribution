@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState, useEffect, useCallback, Suspense } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import SearchBar from '@/components/ui/SearchBar'
 import CategoryChips from '@/components/ui/CategoryChips'
 import TrendingCard from '@/components/ui/TrendingCard'
@@ -9,10 +9,14 @@ import RecommendSection from '@/components/RecommendSection'
 import { Article, Category } from '@/types'
 import { Newspaper, Loader2 } from 'lucide-react'
 
-export default function HomePage() {
+function HomeContent() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+
   const [keyword, setKeyword] = useState('')
-  const [category, setCategory] = useState<Category>('すべて')
+  const [category, setCategory] = useState<Category>(
+    (searchParams.get('category') as Category) ?? 'すべて'
+  )
   const [articles, setArticles] = useState<Article[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -33,8 +37,9 @@ export default function HomePage() {
   }, [])
 
   useEffect(() => {
-    fetchArticles('', 'すべて')
-  }, [fetchArticles])
+    fetchArticles(keyword, category)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const handleSearch = (kw: string) => {
     setKeyword(kw)
@@ -47,54 +52,61 @@ export default function HomePage() {
 
   const handleCategory = (cat: Category) => {
     setCategory(cat)
+    // カテゴリをURLに反映（history entryは増やさずreplaceで更新）
+    const url = cat === 'すべて' ? '/' : `/?category=${encodeURIComponent(cat)}`
+    router.replace(url, { scroll: false })
     fetchArticles(keyword, cat)
   }
 
   return (
+    <main className="max-w-2xl mx-auto px-4 py-5 space-y-4">
+      <SearchBar onSearch={handleSearch} placeholder="キーワードでニュースを検索..." />
+      <CategoryChips selected={category} onChange={handleCategory} />
+
+      <section>
+        <h2 className="text-base font-bold text-gray-800 mb-3">
+          {keyword
+            ? `「${keyword}」の検索結果`
+            : category !== 'すべて'
+            ? `${category}のニュース`
+            : '話題のニュース'}
+        </h2>
+        {loading ? (
+          <div className="flex justify-center py-12">
+            <Loader2 className="animate-spin text-blue-500" size={28} />
+          </div>
+        ) : articles.length === 0 ? (
+          <p className="text-center text-gray-500 py-12 text-sm">ニュースが見つかりませんでした</p>
+        ) : (
+          <div className="space-y-3">
+            {articles.map((article, i) => (
+              <TrendingCard key={article.id} article={article} rank={i} />
+            ))}
+          </div>
+        )}
+      </section>
+
+      <RecommendSection />
+    </main>
+  )
+}
+
+export default function HomePage() {
+  return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
       <header className="bg-white border-b border-gray-200 sticky top-0 z-10">
         <div className="max-w-2xl mx-auto px-4 py-3 flex items-center gap-3">
           <Newspaper className="text-blue-600 shrink-0" size={22} />
           <span className="font-bold text-gray-900 text-lg">NewsCuration</span>
         </div>
       </header>
-
-      <main className="max-w-2xl mx-auto px-4 py-5 space-y-4">
-        {/* Search */}
-        <SearchBar onSearch={handleSearch} placeholder="キーワードでニュースを検索..." />
-
-        {/* Category filter */}
-        <CategoryChips selected={category} onChange={handleCategory} />
-
-        {/* Trending news */}
-        <section>
-          <h2 className="text-base font-bold text-gray-800 mb-3">
-            {keyword
-              ? `「${keyword}」の検索結果`
-              : category !== 'すべて'
-              ? `${category}のニュース`
-              : '話題のニュース'}
-          </h2>
-
-          {loading ? (
-            <div className="flex justify-center py-12">
-              <Loader2 className="animate-spin text-blue-500" size={28} />
-            </div>
-          ) : articles.length === 0 ? (
-            <p className="text-center text-gray-500 py-12 text-sm">ニュースが見つかりませんでした</p>
-          ) : (
-            <div className="space-y-3">
-              {articles.map((article, i) => (
-                <TrendingCard key={article.id} article={article} rank={i} />
-              ))}
-            </div>
-          )}
-        </section>
-
-        {/* Recommendations based on browsing history */}
-        <RecommendSection />
-      </main>
+      <Suspense fallback={
+        <div className="flex justify-center py-20">
+          <Loader2 className="animate-spin text-blue-500" size={28} />
+        </div>
+      }>
+        <HomeContent />
+      </Suspense>
     </div>
   )
 }

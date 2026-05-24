@@ -1,10 +1,12 @@
 'use client'
 
+import { useState, useEffect } from 'react'
 import { Article } from '@/types'
 import { formatDistanceToNow } from 'date-fns'
 import { ja } from 'date-fns/locale'
 import { useRouter } from 'next/navigation'
 import { addToHistory } from '@/lib/history'
+import { ImageOff } from 'lucide-react'
 
 interface Props {
   article: Article
@@ -13,13 +15,20 @@ interface Props {
 
 export default function TrendingCard({ article, rank }: Props) {
   const router = useRouter()
+  const [imgSrc, setImgSrc] = useState<string | undefined>(article.imageUrl)
+
+  useEffect(() => {
+    if (imgSrc || !article.url) return
+    fetch(`/api/og-image?url=${encodeURIComponent(article.url)}`)
+      .then(r => r.json())
+      .then((d: { imageUrl?: string }) => { if (d.imageUrl) setImgSrc(d.imageUrl) })
+      .catch(() => {})
+  }, [article.url, imgSrc])
 
   const timeAgo = (() => {
     try {
       return formatDistanceToNow(new Date(article.publishedAt), { addSuffix: true, locale: ja })
-    } catch {
-      return ''
-    }
+    } catch { return '' }
   })()
 
   const handleClick = () => {
@@ -36,7 +45,7 @@ export default function TrendingCard({ article, rank }: Props) {
     >
       <div className="flex items-start gap-3">
         {rank !== undefined && (
-          <span className={`shrink-0 text-2xl font-bold ${rank < 3 ? 'text-blue-500' : 'text-gray-300'}`}>
+          <span className={`shrink-0 text-xl font-bold w-6 text-right ${rank < 3 ? 'text-blue-500' : 'text-gray-300'}`}>
             {rank + 1}
           </span>
         )}
@@ -45,6 +54,19 @@ export default function TrendingCard({ article, rank }: Props) {
           <h3 className="text-sm font-semibold text-gray-900 line-clamp-2 leading-snug">{article.title}</h3>
           {timeAgo && <p className="mt-1.5 text-xs text-gray-400">{timeAgo}</p>}
         </div>
+        {/* サムネイル */}
+        {imgSrc ? (
+          <img
+            src={imgSrc}
+            alt={article.title}
+            onError={() => setImgSrc(undefined)}
+            className="w-16 h-16 shrink-0 rounded-lg object-cover bg-gray-100"
+          />
+        ) : (
+          <div className="w-16 h-16 shrink-0 rounded-lg bg-gray-100 flex items-center justify-center">
+            <ImageOff size={14} className="text-gray-300" />
+          </div>
+        )}
       </div>
     </button>
   )

@@ -4,6 +4,13 @@ import { Article, Category } from '@/types'
 const parser = new Parser({
   timeout: 10000,
   headers: { 'User-Agent': 'NewsCuration/1.0' },
+  customFields: {
+    item: [
+      ['media:content', 'mediaContent'],
+      ['media:thumbnail', 'mediaThumbnail'],
+      ['enclosure', 'enclosure'],
+    ],
+  },
 })
 
 const CATEGORY_QUERY_MAP: Record<Exclude<Category, 'すべて'>, string> = {
@@ -130,8 +137,25 @@ function isWithinDays(publishedAt: string, days: number): boolean {
   }
 }
 
+type RssItem = Parser.Item & {
+  source?: { _?: string }
+  mediaContent?: { $?: { url?: string } } | { $?: { url?: string } }[]
+  mediaThumbnail?: { $?: { url?: string } }
+  enclosure?: { url?: string }
+}
+
+function extractImageFromItem(item: RssItem): string | undefined {
+  if (Array.isArray(item.mediaContent)) {
+    return item.mediaContent[0]?.$?.url
+  }
+  if (item.mediaContent?.$?.url) return item.mediaContent.$.url
+  if (item.mediaThumbnail?.$?.url) return item.mediaThumbnail.$.url
+  if (item.enclosure?.url) return item.enclosure.url
+  return undefined
+}
+
 function buildArticles(
-  items: (Parser.Item & { source?: { _?: string } })[],
+  items: RssItem[],
   resolvedUrls: string[],
   feedUrl: string,
   prefix: string,
@@ -149,6 +173,7 @@ function buildArticles(
       source,
       publishedAt: item.pubDate ?? item.isoDate ?? new Date().toISOString(),
       description: item.contentSnippet ?? item.content ?? '',
+      imageUrl: extractImageFromItem(item),
     }
   })
 }
