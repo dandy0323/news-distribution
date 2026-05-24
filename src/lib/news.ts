@@ -66,17 +66,18 @@ async function resolveUrls(urls: string[]): Promise<string[]> {
   return Promise.all(urls.map(resolveArticleUrl))
 }
 
-// キーワードと記事の関連性チェック（日本語・英語対応）
+// キーワードと記事タイトルの関連性チェック
+// 3文字以上の部分文字列がタイトルに1つでも含まれれば「関連あり」とみなす。
+// スペースなしの日本語キーワード（記事タイトルそのものなど）にも対応。
 function isRelevant(article: Article, keyword: string): boolean {
-  // キーワードを2文字以上のトークンに分割（スペース・全角スペース区切り）
-  const tokens = keyword
-    .toLowerCase()
-    .split(/[\s　]+/)
-    .filter(t => t.length >= 2)
-  if (tokens.length === 0) return true
-  const text = `${article.title} ${article.description}`.toLowerCase()
-  // いずれかのトークンが含まれていれば関連ありとみなす
-  return tokens.some(token => text.includes(token))
+  const k = keyword.toLowerCase()
+  const title = article.title.toLowerCase()
+  const WINDOW = 3
+  if (k.length < WINDOW) return true
+  for (let i = 0; i <= k.length - WINDOW; i++) {
+    if (title.includes(k.slice(i, i + WINDOW))) return true
+  }
+  return false
 }
 
 function buildArticles(
@@ -106,14 +107,15 @@ export async function fetchNewsByKeyword(keyword: string, maxItems = 20): Promis
   const feedUrl = buildGoogleNewsUrl(keyword)
   try {
     const feed = await parser.parseURL(feedUrl)
-    // 多めに取得してフィルタ後にmaxItems件に絞る
-    const items = (feed.items ?? []).slice(0, maxItems * 2) as (Parser.Item & { source?: { _?: string } })[]
+    // Google NewsのRSS上限は通常100件。多めに取得してフィルタ後にmaxItems件確保する
+    const items = (feed.items ?? []).slice(0, 100) as (Parser.Item & { source?: { _?: string } })[]
     const rawUrls = items.map(item => item.link ?? '')
     const resolvedUrls = await resolveUrls(rawUrls)
     const all = buildArticles(items, resolvedUrls, feedUrl, keyword)
     const filtered = all.filter(a => isRelevant(a, keyword))
-    // フィルタ後0件になってしまった場合はフィルタなしで返す（カテゴリ検索など英語クエリ対策）
-    return (filtered.length > 0 ? filtered : all).slice(0, maxItems)
+    // フィルタ後に極端に少ない場合はフィルタなしにフォールバック（英語クエリ等の対策）
+    const result = filtered.length >= 5 ? filtered : all
+    return result.slice(0, maxItems)
   } catch (err) {
     console.error('[fetchNewsByKeyword]', err)
     return []
