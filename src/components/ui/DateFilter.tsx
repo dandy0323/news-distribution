@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { Calendar } from 'lucide-react'
 
-export type DateFilterType = 'today' | 'week' | 'custom'
+export type DateFilterType = 'none' | 'today' | 'week' | 'custom'
 
 export interface DateRange {
   from: string
@@ -36,6 +36,7 @@ function weekAgoStr() {
 }
 
 const PRESETS = [
+  { key: 'none' as DateFilterType, label: 'すべての期間' },
   { key: 'today' as DateFilterType, label: '前日・当日' },
   { key: 'week' as DateFilterType, label: '直近1週間' },
   { key: 'custom' as DateFilterType, label: '期間指定' },
@@ -45,7 +46,9 @@ export default function DateFilter({ value, customRange, onChange }: Props) {
   const [localRange, setLocalRange] = useState<DateRange>(customRange)
 
   const handlePreset = (type: DateFilterType) => {
-    if (type === 'today') {
+    if (type === 'none') {
+      onChange('none', { from: '', to: '' })
+    } else if (type === 'today') {
       onChange('today', { from: yesterdayStr(), to: todayStr() })
     } else if (type === 'week') {
       onChange('week', { from: weekAgoStr(), to: todayStr() })

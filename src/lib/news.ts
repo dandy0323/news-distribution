@@ -193,9 +193,12 @@ function applyFilters(all: Article[], maxItems: number, dateFrom?: Date, dateTo?
   // 日付範囲が明示指定された場合はそれを優先
   if (dateFrom || dateTo) {
     const ranged = all.filter(a => inRange(a))
-    const trustedRanged = ranged.filter(a => isTrustedSource(a.source))
-    const result = trustedRanged.length >= 3 ? trustedRanged : ranged
-    return result.slice(0, maxItems)
+    if (ranged.length > 0) {
+      const trustedRanged = ranged.filter(a => isTrustedSource(a.source))
+      const result = trustedRanged.length >= 3 ? trustedRanged : ranged
+      return result.slice(0, maxItems)
+    }
+    // 指定範囲に記事がなければ以降のカスケードへフォールスルー
   }
 
   // デフォルト: 直近3日 → 7日 → 30日 → 全期間の順でフォールバック
@@ -241,15 +244,15 @@ export async function fetchNewsByCategory(category: Exclude<Category, 'すべて
   return filtered.slice(0, maxItems).map(a => ({ ...a, category }))
 }
 
-export async function fetchTrendingTopics(): Promise<Article[]> {
+export async function fetchTrendingTopics(dateFrom?: Date, dateTo?: Date): Promise<Article[]> {
   const feedUrl = `https://news.google.com/rss?hl=ja&gl=JP&ceid=JP:ja`
   try {
     const feed = await parser.parseURL(feedUrl)
-    const items = (feed.items ?? []).slice(0, 60) as (Parser.Item & { source?: { _?: string } })[]
+    const items = (feed.items ?? []).slice(0, 60) as RssItem[]
     const rawUrls = items.map(item => item.link ?? '')
     const resolvedUrls = await resolveUrls(rawUrls)
     const all = buildArticles(items, resolvedUrls, feedUrl, 'trending')
-    return applyFilters(all, 30)
+    return applyFilters(all, 30, dateFrom, dateTo)
   } catch (err) {
     console.error('[fetchTrendingTopics]', err)
     return []

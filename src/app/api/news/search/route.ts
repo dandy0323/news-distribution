@@ -13,7 +13,7 @@ export async function GET(req: NextRequest) {
 
   try {
     if (!keyword && (!category || category === 'すべて')) {
-      const articles = await fetchTrendingTopics()
+      const articles = await fetchTrendingTopics(dateFrom, dateTo)
       return NextResponse.json({ articles })
     }
 

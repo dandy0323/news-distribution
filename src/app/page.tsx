@@ -20,14 +20,8 @@ function HomeContent() {
   )
   const [articles, setArticles] = useState<Article[]>([])
   const [loading, setLoading] = useState(true)
-  const [dateFilterType, setDateFilterType] = useState<DateFilterType>('week')
-  const [dateRange, setDateRange] = useState<DateRange>(() => {
-    const to = new Date()
-    const from = new Date()
-    from.setDate(from.getDate() - 7)
-    const fmt = (d: Date) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
-    return { from: fmt(from), to: fmt(to) }
-  })
+  const [dateFilterType, setDateFilterType] = useState<DateFilterType>('none')
+  const [dateRange, setDateRange] = useState<DateRange>({ from: '', to: '' })
 
   const fetchArticles = useCallback(async (kw: string, cat: Category, filterType: DateFilterType, range: DateRange) => {
     setLoading(true)
@@ -35,8 +29,8 @@ function HomeContent() {
       const params = new URLSearchParams()
       if (kw) params.set('q', kw)
       if (cat !== 'すべて') params.set('category', cat)
-      if (range.from) params.set('from', range.from)
-      if (range.to) params.set('to', range.to)
+      if (filterType !== 'none' && range.from) params.set('from', range.from)
+      if (filterType !== 'none' && range.to) params.set('to', range.to)
       const res = await fetch(`/api/news/search?${params}`)
       const data = await res.json() as { articles: Article[] }
       setArticles(data.articles ?? [])
