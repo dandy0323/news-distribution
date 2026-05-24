@@ -40,6 +40,7 @@ export default function TopicPage({ params }: { params: Promise<{ id: string }> 
   const [trends, setTrends] = useState<ReportingTrend[]>([])
   const [historyText, setHistoryText] = useState('')
   const [aiLoading, setAiLoading] = useState<AiSection | null>(null)
+  const [aiError, setAiError] = useState<Partial<Record<AiSection, string>>>({})
 
   const [openSection, setOpenSection] = useState<AiSection | null>(null)
 
@@ -61,29 +62,39 @@ export default function TopicPage({ params }: { params: Promise<{ id: string }> 
     if (aiLoading) return
     setAiLoading(type)
     setOpenSection(type)
+    setAiError(prev => ({ ...prev, [type]: undefined }))
     try {
       const res = await fetch('/api/ai/summarize', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ keyword, articles, type }),
       })
-      const data = await res.json() as { result: string | ReportingTrend[] }
+      const data = await res.json() as { result?: string | ReportingTrend[]; error?: string }
+      if (!res.ok || data.error) {
+        setAiError(prev => ({ ...prev, [type]: data.error ?? '生成に失敗しました' }))
+        return
+      }
       if (type === 'summary') setSummary(data.result as string)
       else if (type === 'trends') setTrends(data.result as ReportingTrend[])
       else if (type === 'history') setHistoryText(data.result as string)
+    } catch {
+      setAiError(prev => ({ ...prev, [type]: 'ネットワークエラーが発生しました' }))
     } finally {
       setAiLoading(null)
     }
   }
 
+  const hasContent = (type: AiSection) => {
+    if (type === 'summary') return !!summary
+    if (type === 'trends') return trends.length > 0
+    if (type === 'history') return !!historyText
+    return false
+  }
+
   const toggleSection = (type: AiSection) => {
-    if (openSection === type) {
+    if (openSection === type && !aiError[type]) {
       setOpenSection(null)
-    } else if (
-      (type === 'summary' && !summary) ||
-      (type === 'trends' && trends.length === 0) ||
-      (type === 'history' && !historyText)
-    ) {
+    } else if (!hasContent(type) || aiError[type]) {
       callAi(type)
     } else {
       setOpenSection(type)
@@ -115,11 +126,11 @@ export default function TopicPage({ params }: { params: Promise<{ id: string }> 
         <AiCard
           icon={<Sparkles size={16} className="text-yellow-500" />}
           title="AI要約"
-          type="summary"
           open={openSection === 'summary'}
           loading={aiLoading === 'summary'}
           onToggle={() => toggleSection('summary')}
           hasContent={!!summary}
+          error={aiError.summary}
         >
           <p className="text-sm text-gray-700 leading-relaxed">{summary}</p>
         </AiCard>
@@ -148,11 +159,11 @@ export default function TopicPage({ params }: { params: Promise<{ id: string }> 
         <AiCard
           icon={<BarChart2 size={16} className="text-blue-500" />}
           title="各社の報道傾向"
-          type="trends"
           open={openSection === 'trends'}
           loading={aiLoading === 'trends'}
           onToggle={() => toggleSection('trends')}
           hasContent={trends.length > 0}
+          error={aiError.trends}
         >
           <div className="space-y-3">
             {trends.map((t, i) => (
@@ -174,11 +185,11 @@ export default function TopicPage({ params }: { params: Promise<{ id: string }> 
         <AiCard
           icon={<History size={16} className="text-purple-500" />}
           title="経緯・背景まとめ"
-          type="history"
           open={openSection === 'history'}
           loading={aiLoading === 'history'}
           onToggle={() => toggleSection('history')}
           hasContent={!!historyText}
+          error={aiError.history}
         >
           <p className="text-sm text-gray-700 leading-relaxed">{historyText}</p>
         </AiCard>
@@ -190,15 +201,15 @@ export default function TopicPage({ params }: { params: Promise<{ id: string }> 
 interface AiCardProps {
   icon: React.ReactNode
   title: string
-  type: AiSection
   open: boolean
   loading: boolean
   onToggle: () => void
   hasContent: boolean
+  error?: string
   children: React.ReactNode
 }
 
-function AiCard({ icon, title, open, loading, onToggle, hasContent, children }: AiCardProps) {
+function AiCard({ icon, title, open, loading, onToggle, hasContent, error, children }: AiCardProps) {
   return (
     <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
       <button
@@ -210,9 +221,10 @@ function AiCard({ icon, title, open, loading, onToggle, hasContent, children }: 
           {title}
         </span>
         <span className="flex items-center gap-2 text-xs text-gray-500">
-          {!hasContent && !loading && '生成する'}
+          {error && <span className="text-red-500">再試行する</span>}
+          {!hasContent && !loading && !error && '生成する'}
           {loading && <Loader2 size={14} className="animate-spin" />}
-          {open ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+          {open && !error ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
         </span>
       </button>
       {open && (
@@ -222,6 +234,8 @@ function AiCard({ icon, title, open, loading, onToggle, hasContent, children }: 
               <Loader2 size={16} className="animate-spin" />
               生成中...
             </div>
+          ) : error ? (
+            <p className="text-sm text-red-500">{error}</p>
           ) : (
             children
           )}
