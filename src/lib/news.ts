@@ -81,8 +81,12 @@ function isTrustedSource(source: string): boolean {
   return TRUSTED_SOURCE_PATTERNS.some(p => s.includes(p.toLowerCase()))
 }
 
-function buildGoogleNewsUrl(query: string, lang = 'ja', country = 'JP'): string {
-  const encoded = encodeURIComponent(query)
+function buildGoogleNewsUrl(query: string, lang = 'ja', country = 'JP', fromStr?: string): string {
+  // when:Nd でGoogle News APIレベルで日付を絞り込む（古い記事の混入を防ぐ）
+  const daysBack = fromStr
+    ? Math.max(Math.ceil((Date.now() - new Date(fromStr).getTime()) / 86400000) + 1, 1)
+    : 30  // デフォルト：直近30日
+  const encoded = encodeURIComponent(`${query} when:${daysBack}d`)
   return `https://news.google.com/rss/search?q=${encoded}&hl=${lang}&gl=${country}&ceid=${country}:${lang}`
 }
 
@@ -230,7 +234,7 @@ function applyFilters(all: Article[], maxItems: number, fromStr?: string, toStr?
 }
 
 export async function fetchNewsByKeyword(keyword: string, maxItems = 20, fromStr?: string, toStr?: string): Promise<Article[]> {
-  const feedUrl = buildGoogleNewsUrl(keyword)
+  const feedUrl = buildGoogleNewsUrl(keyword, 'ja', 'JP', fromStr)
   try {
     const feed = await parser.parseURL(feedUrl)
     const items = (feed.items ?? []).slice(0, 60) as RssItem[]
