@@ -6,6 +6,7 @@ import SearchBar from '@/components/ui/SearchBar'
 import CategoryChips from '@/components/ui/CategoryChips'
 import TrendingCard from '@/components/ui/TrendingCard'
 import RecommendSection from '@/components/RecommendSection'
+import DateFilter, { DateFilterType, DateRange } from '@/components/ui/DateFilter'
 import { Article, Category } from '@/types'
 import { Newspaper, Loader2 } from 'lucide-react'
 
@@ -19,13 +20,23 @@ function HomeContent() {
   )
   const [articles, setArticles] = useState<Article[]>([])
   const [loading, setLoading] = useState(true)
+  const [dateFilterType, setDateFilterType] = useState<DateFilterType>('week')
+  const [dateRange, setDateRange] = useState<DateRange>(() => {
+    const to = new Date()
+    const from = new Date()
+    from.setDate(from.getDate() - 7)
+    const fmt = (d: Date) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
+    return { from: fmt(from), to: fmt(to) }
+  })
 
-  const fetchArticles = useCallback(async (kw: string, cat: Category) => {
+  const fetchArticles = useCallback(async (kw: string, cat: Category, filterType: DateFilterType, range: DateRange) => {
     setLoading(true)
     try {
       const params = new URLSearchParams()
       if (kw) params.set('q', kw)
       if (cat !== 'すべて') params.set('category', cat)
+      if (range.from) params.set('from', range.from)
+      if (range.to) params.set('to', range.to)
       const res = await fetch(`/api/news/search?${params}`)
       const data = await res.json() as { articles: Article[] }
       setArticles(data.articles ?? [])
@@ -37,7 +48,7 @@ function HomeContent() {
   }, [])
 
   useEffect(() => {
-    fetchArticles(keyword, category)
+    fetchArticles(keyword, category, dateFilterType, dateRange)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -46,22 +57,28 @@ function HomeContent() {
     if (kw) {
       router.push(`/topic/${encodeURIComponent(kw)}`)
     } else {
-      fetchArticles('', category)
+      fetchArticles('', category, dateFilterType, dateRange)
     }
   }
 
   const handleCategory = (cat: Category) => {
     setCategory(cat)
-    // カテゴリをURLに反映（history entryは増やさずreplaceで更新）
     const url = cat === 'すべて' ? '/' : `/?category=${encodeURIComponent(cat)}`
     router.replace(url, { scroll: false })
-    fetchArticles(keyword, cat)
+    fetchArticles(keyword, cat, dateFilterType, dateRange)
+  }
+
+  const handleDateFilter = (type: DateFilterType, range: DateRange) => {
+    setDateFilterType(type)
+    setDateRange(range)
+    fetchArticles(keyword, category, type, range)
   }
 
   return (
     <main className="max-w-2xl mx-auto px-4 py-5 space-y-4">
       <SearchBar onSearch={handleSearch} placeholder="キーワードでニュースを検索..." />
       <CategoryChips selected={category} onChange={handleCategory} />
+      <DateFilter value={dateFilterType} customRange={dateRange} onChange={handleDateFilter} />
 
       <section>
         <h2 className="text-base font-bold text-gray-800 mb-3">

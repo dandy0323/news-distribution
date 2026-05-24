@@ -19,7 +19,7 @@ export default function TrendingCard({ article, rank }: Props) {
 
   useEffect(() => {
     if (imgSrc || !article.url) return
-    fetch(`/api/og-image?url=${encodeURIComponent(article.url)}`)
+    fetch(`/api/og-image?url=${encodeURIComponent(article.url)}&keyword=${encodeURIComponent(article.title)}`)
       .then(r => r.json())
       .then((d: { imageUrl?: string }) => { if (d.imageUrl) setImgSrc(d.imageUrl) })
       .catch(() => {})
