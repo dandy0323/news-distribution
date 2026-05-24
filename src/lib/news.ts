@@ -17,6 +17,51 @@ const CATEGORY_QUERY_MAP: Record<Exclude<Category, 'すべて'>, string> = {
   科学: 'science',
 }
 
+// 信頼できるメディアの識別キーワード（部分一致・大文字小文字無視）
+const TRUSTED_SOURCE_PATTERNS = [
+  // 日本：主要全国紙
+  '日本経済新聞', '日経',
+  '読売新聞', '読売',
+  '朝日新聞', '朝日',
+  '毎日新聞', '毎日',
+  '産経新聞', '産経',
+  '東京新聞',
+  // 日本：通信社
+  '時事通信', '時事',
+  '共同通信', '共同',
+  // 日本：放送局
+  'NHK',
+  'TBS',
+  'テレビ朝日', 'tv asahi',
+  '日本テレビ', 'ntv',
+  'フジテレビ', 'フジ', 'fnn',
+  'テレビ東京', 'tx',
+  // 日本：専門紙・経済
+  'ブルームバーグ', 'bloomberg',
+  '日刊工業新聞',
+  // 海外：通信社
+  'ロイター', 'reuters',
+  'ap通信', 'associated press',
+  'afp',
+  // 海外：放送・メディア
+  'bbc',
+  'cnn',
+  'the guardian',
+  'washington post',
+  'new york times', 'nyt',
+  'financial times', 'ft',
+  'the economist',
+  'al jazeera', 'アルジャジーラ',
+  'nbc',
+  'abc news',
+  'fox news',
+]
+
+function isTrustedSource(source: string): boolean {
+  const s = source.toLowerCase()
+  return TRUSTED_SOURCE_PATTERNS.some(p => s.includes(p.toLowerCase()))
+}
+
 function buildGoogleNewsUrl(query: string, lang = 'ja', country = 'JP'): string {
   const encoded = encodeURIComponent(query)
   return `https://news.google.com/rss/search?q=${encoded}&hl=${lang}&gl=${country}&ceid=${country}:${lang}`
@@ -63,7 +108,6 @@ async function resolveUrls(urls: string[]): Promise<string[]> {
   return Promise.all(urls.map(resolveArticleUrl))
 }
 
-// 記事が直近N日以内かチェック
 function isWithinDays(publishedAt: string, days: number): boolean {
   try {
     const pub = new Date(publishedAt).getTime()
@@ -97,6 +141,25 @@ function buildArticles(
   })
 }
 
+// 信頼メディア＋時系列の二段階フィルタ
+// 優先順: 信頼×7日 → 信頼×30日 → 信頼×全期間 → 全ソース×7日 → 全件
+function applyFilters(all: Article[], maxItems: number): Article[] {
+  const trusted = all.filter(a => isTrustedSource(a.source))
+  const trusted7 = trusted.filter(a => isWithinDays(a.publishedAt, 7))
+  if (trusted7.length >= 3) return trusted7.slice(0, maxItems)
+
+  const trusted30 = trusted.filter(a => isWithinDays(a.publishedAt, 30))
+  if (trusted30.length >= 3) return trusted30.slice(0, maxItems)
+
+  if (trusted.length >= 3) return trusted.slice(0, maxItems)
+
+  // 信頼メディアが足りなければ時系列のみで絞る
+  const recent7 = all.filter(a => isWithinDays(a.publishedAt, 7))
+  if (recent7.length >= 3) return recent7.slice(0, maxItems)
+
+  return all.slice(0, maxItems)
+}
+
 export async function fetchNewsByKeyword(keyword: string, maxItems = 20): Promise<Article[]> {
   const feedUrl = buildGoogleNewsUrl(keyword)
   try {
@@ -105,12 +168,7 @@ export async function fetchNewsByKeyword(keyword: string, maxItems = 20): Promis
     const rawUrls = items.map(item => item.link ?? '')
     const resolvedUrls = await resolveUrls(rawUrls)
     const all = buildArticles(items, resolvedUrls, feedUrl, keyword)
-
-    // 直近7日以内の記事を優先。5件未満なら30日に自動拡張、それでも足りなければ全件
-    const week = all.filter(a => isWithinDays(a.publishedAt, 7))
-    const month = all.filter(a => isWithinDays(a.publishedAt, 30))
-    const result = week.length >= 5 ? week : month.length > 0 ? month : all
-    return result.slice(0, maxItems)
+    return applyFilters(all, maxItems)
   } catch (err) {
     console.error('[fetchNewsByKeyword]', err)
     return []
@@ -127,10 +185,11 @@ export async function fetchTrendingTopics(): Promise<Article[]> {
   const feedUrl = `https://news.google.com/rss?hl=ja&gl=JP&ceid=JP:ja`
   try {
     const feed = await parser.parseURL(feedUrl)
-    const items = (feed.items ?? []).slice(0, 30) as (Parser.Item & { source?: { _?: string } })[]
+    const items = (feed.items ?? []).slice(0, 60) as (Parser.Item & { source?: { _?: string } })[]
     const rawUrls = items.map(item => item.link ?? '')
     const resolvedUrls = await resolveUrls(rawUrls)
-    return buildArticles(items, resolvedUrls, feedUrl, 'trending')
+    const all = buildArticles(items, resolvedUrls, feedUrl, 'trending')
+    return applyFilters(all, 30)
   } catch (err) {
     console.error('[fetchTrendingTopics]', err)
     return []
