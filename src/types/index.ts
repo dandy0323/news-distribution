@@ -37,6 +37,12 @@ export interface ReportingTrend {
   summary: string
 }
 
+export interface TopicHistory {
+  timeline: string[]
+  cause: string
+  outlook: string
+}
+
 export interface AiAnalysis {
   summary?: string
   trends?: ReportingTrend[]

@@ -1,5 +1,5 @@
 import { GoogleGenAI } from '@google/genai'
-import { Article, ReportingTrend } from '@/types'
+import { Article, ReportingTrend, TopicHistory } from '@/types'
 
 function getClient() {
   const apiKey = process.env.GEMINI_API_KEY
@@ -54,15 +54,24 @@ ${articlesToText(articles)}
   }
 }
 
-export async function generateTopicHistory(keyword: string, articles: Article[]): Promise<string> {
+export async function generateTopicHistory(keyword: string, articles: Article[]): Promise<TopicHistory> {
   const ai = getClient()
   const prompt = `以下は「${keyword}」に関するニュース記事です。
-この記事群から読み取れる出来事の経緯・背景を時系列で整理し、
-「このトピックをはじめて知る読者」向けに300〜400字でまとめてください。
-見出しや箇条書きは使わず、流れるような文章でお願いします。
+記事の内容をもとに、以下のJSON形式のみで回答してください（他のテキスト不要）。
+
+{
+  "timeline": ["（日付や順序がわかる場合は先頭に記載）発生した事象を時系列で箇条書き。1項目50字以内で5〜8項目"],
+  "cause": "事件であれば犯人の動機、事故であれば発生原因、政策であれば背景事情などを150字以内で記述。不明な場合は「現時点では詳細不明」と記載",
+  "outlook": "今後予想される展開・対応・影響などを150字以内で記述"
+}
 
 ${articlesToText(articles)}`
 
   const response = await ai.models.generateContent({ model: MODEL, contents: prompt })
-  return response.text ?? ''
+  const text = (response.text ?? '').replace(/```json\n?|\n?```/g, '').trim()
+  try {
+    return JSON.parse(text) as TopicHistory
+  } catch {
+    return { timeline: [], cause: '解析に失敗しました', outlook: '解析に失敗しました' }
+  }
 }

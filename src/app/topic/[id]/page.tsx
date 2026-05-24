@@ -4,7 +4,7 @@ import { useState, useEffect, use } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import SearchBar from '@/components/ui/SearchBar'
 import ArticleCard from '@/components/ui/ArticleCard'
-import { Article, ReportingTrend } from '@/types'
+import { Article, ReportingTrend, TopicHistory } from '@/types'
 import { addToHistory } from '@/lib/history'
 import {
   Loader2,
@@ -15,6 +15,9 @@ import {
   Newspaper,
   ChevronDown,
   ChevronUp,
+  Clock,
+  AlertCircle,
+  TrendingUp,
 } from 'lucide-react'
 
 type AiSection = 'summary' | 'trends' | 'history'
@@ -38,11 +41,11 @@ export default function TopicPage({ params }: { params: Promise<{ id: string }> 
 
   const [summary, setSummary] = useState('')
   const [trends, setTrends] = useState<ReportingTrend[]>([])
-  const [historyText, setHistoryText] = useState('')
-  const [aiLoading, setAiLoading] = useState<AiSection | null>(null)
+  const [topicHistory, setTopicHistory] = useState<TopicHistory | null>(null)
+  const [aiLoading, setAiLoading] = useState<Partial<Record<AiSection, boolean>>>({})
   const [aiError, setAiError] = useState<Partial<Record<AiSection, string>>>({})
-
-  const [openSection, setOpenSection] = useState<AiSection | null>(null)
+  // 複数セクションを同時に開けるよう Set で管理
+  const [openSections, setOpenSections] = useState<Set<AiSection>>(new Set())
 
   useEffect(() => {
     addToHistory({ keyword, topicId: id })
@@ -59,9 +62,9 @@ export default function TopicPage({ params }: { params: Promise<{ id: string }> 
   }, [keyword, id])
 
   const callAi = async (type: AiSection) => {
-    if (aiLoading) return
-    setAiLoading(type)
-    setOpenSection(type)
+    if (aiLoading[type]) return
+    setAiLoading(prev => ({ ...prev, [type]: true }))
+    setOpenSections(prev => new Set(prev).add(type))
     setAiError(prev => ({ ...prev, [type]: undefined }))
     try {
       const res = await fetch('/api/ai/summarize', {
@@ -69,41 +72,44 @@ export default function TopicPage({ params }: { params: Promise<{ id: string }> 
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ keyword, articles, type }),
       })
-      const data = await res.json() as { result?: string | ReportingTrend[]; error?: string }
+      const data = await res.json() as { result?: unknown; error?: string }
       if (!res.ok || data.error) {
         setAiError(prev => ({ ...prev, [type]: data.error ?? '生成に失敗しました' }))
         return
       }
       if (type === 'summary') setSummary(data.result as string)
       else if (type === 'trends') setTrends(data.result as ReportingTrend[])
-      else if (type === 'history') setHistoryText(data.result as string)
+      else if (type === 'history') setTopicHistory(data.result as TopicHistory)
     } catch {
       setAiError(prev => ({ ...prev, [type]: 'ネットワークエラーが発生しました' }))
     } finally {
-      setAiLoading(null)
+      setAiLoading(prev => ({ ...prev, [type]: false }))
     }
   }
 
   const hasContent = (type: AiSection) => {
     if (type === 'summary') return !!summary
     if (type === 'trends') return trends.length > 0
-    if (type === 'history') return !!historyText
+    if (type === 'history') return !!topicHistory
     return false
   }
 
   const toggleSection = (type: AiSection) => {
-    if (openSection === type && !aiError[type]) {
-      setOpenSection(null)
+    const isOpen = openSections.has(type)
+    if (isOpen && !aiError[type]) {
+      // 開いていてエラーなし → 閉じる
+      setOpenSections(prev => { const s = new Set(prev); s.delete(type); return s })
     } else if (!hasContent(type) || aiError[type]) {
+      // 未生成 or エラー → 生成（セクションは開いたまま）
       callAi(type)
     } else {
-      setOpenSection(type)
+      // 生成済みで閉じている → 開く
+      setOpenSections(prev => new Set(prev).add(type))
     }
   }
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
       <header className="bg-white border-b border-gray-200 sticky top-0 z-10">
         <div className="max-w-2xl mx-auto px-4 py-3 flex items-center gap-3">
           <button onClick={() => router.back()} className="text-gray-500 hover:text-gray-700">
@@ -115,19 +121,18 @@ export default function TopicPage({ params }: { params: Promise<{ id: string }> 
       </header>
 
       <main className="max-w-2xl mx-auto px-4 py-5 space-y-4">
-        {/* Inline search */}
         <SearchBar
           initialValue={keyword}
           onSearch={kw => kw && router.push(`/topic/${encodeURIComponent(kw)}`)}
           placeholder="別のキーワードで検索..."
         />
 
-        {/* ── AI要約 ── */}
+        {/* ── 要約 ── */}
         <AiCard
           icon={<Sparkles size={16} className="text-yellow-500" />}
-          title="AI要約"
-          open={openSection === 'summary'}
-          loading={aiLoading === 'summary'}
+          title="要約"
+          open={openSections.has('summary')}
+          loading={!!aiLoading.summary}
           onToggle={() => toggleSection('summary')}
           hasContent={!!summary}
           error={aiError.summary}
@@ -155,12 +160,12 @@ export default function TopicPage({ params }: { params: Promise<{ id: string }> 
           )}
         </section>
 
-        {/* ── 報道傾向分析 ── */}
+        {/* ── 各社の報道傾向 ── */}
         <AiCard
           icon={<BarChart2 size={16} className="text-blue-500" />}
           title="各社の報道傾向"
-          open={openSection === 'trends'}
-          loading={aiLoading === 'trends'}
+          open={openSections.has('trends')}
+          loading={!!aiLoading.trends}
           onToggle={() => toggleSection('trends')}
           hasContent={trends.length > 0}
           error={aiError.trends}
@@ -181,17 +186,53 @@ export default function TopicPage({ params }: { params: Promise<{ id: string }> 
           </div>
         </AiCard>
 
-        {/* ── 経緯まとめ ── */}
+        {/* ── 経緯・背景まとめ ── */}
         <AiCard
           icon={<History size={16} className="text-purple-500" />}
           title="経緯・背景まとめ"
-          open={openSection === 'history'}
-          loading={aiLoading === 'history'}
+          open={openSections.has('history')}
+          loading={!!aiLoading.history}
           onToggle={() => toggleSection('history')}
-          hasContent={!!historyText}
+          hasContent={!!topicHistory}
           error={aiError.history}
         >
-          <p className="text-sm text-gray-700 leading-relaxed">{historyText}</p>
+          {topicHistory && (
+            <div className="space-y-4">
+              {/* 時系列 */}
+              <div>
+                <p className="flex items-center gap-1.5 text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">
+                  <Clock size={12} />
+                  時系列
+                </p>
+                <ul className="space-y-1.5">
+                  {topicHistory.timeline.map((item, i) => (
+                    <li key={i} className="flex gap-2 text-sm text-gray-700">
+                      <span className="shrink-0 mt-1 w-1.5 h-1.5 rounded-full bg-purple-400" />
+                      {item}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+
+              {/* 原因 */}
+              <div>
+                <p className="flex items-center gap-1.5 text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">
+                  <AlertCircle size={12} />
+                  原因
+                </p>
+                <p className="text-sm text-gray-700 leading-relaxed">{topicHistory.cause}</p>
+              </div>
+
+              {/* 今後の見通し */}
+              <div>
+                <p className="flex items-center gap-1.5 text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">
+                  <TrendingUp size={12} />
+                  今後の見通し
+                </p>
+                <p className="text-sm text-gray-700 leading-relaxed">{topicHistory.outlook}</p>
+              </div>
+            </div>
+          )}
         </AiCard>
       </main>
     </div>
