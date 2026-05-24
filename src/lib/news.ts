@@ -7,14 +7,25 @@ const parser = new Parser({
 })
 
 const CATEGORY_QUERY_MAP: Record<Exclude<Category, 'すべて'>, string> = {
-  政治: 'politics japan',
-  経済: 'economy japan',
-  社会: 'society japan',
-  テクノロジー: 'technology',
-  エンタメ: 'entertainment japan',
-  スポーツ: 'sports japan',
-  国際: 'world news',
-  科学: 'science',
+  政治: '政治 国会 内閣 政府',
+  経済: '経済 景気 日銀 株式市場',
+  社会: '社会 事件 事故 裁判',
+  テクノロジー: 'テクノロジー AI IT スタートアップ',
+  エンタメ: '芸能 映画 音楽 ドラマ',
+  スポーツ: 'スポーツ 野球 サッカー バスケ',
+  国際: '国際 外交 海外 米国 中国',
+  科学: '科学 研究 宇宙 医療',
+}
+
+// 非経済カテゴリで除外する金融・IR記事のパターン
+const FINANCIAL_NOISE_PATTERNS = [
+  '決算短信', '適時開示', '四半期決算', '業績予想', '有価証券報告',
+  '株価', 'IR情報', '純利益', '営業利益', '売上高',
+]
+
+function isFinancialNoise(article: Article): boolean {
+  const text = `${article.title} ${article.description}`
+  return FINANCIAL_NOISE_PATTERNS.some(p => text.includes(p))
 }
 
 // 信頼できるメディアの識別キーワード（部分一致・大文字小文字無視）
@@ -178,8 +189,11 @@ export async function fetchNewsByKeyword(keyword: string, maxItems = 20): Promis
 
 export async function fetchNewsByCategory(category: Exclude<Category, 'すべて'>, maxItems = 20): Promise<Article[]> {
   const query = CATEGORY_QUERY_MAP[category]
-  const articles = await fetchNewsByKeyword(query, maxItems)
-  return articles.map(a => ({ ...a, category }))
+  const articles = await fetchNewsByKeyword(query, maxItems * 2)
+  const filtered = category === '経済'
+    ? articles
+    : articles.filter(a => !isFinancialNoise(a))
+  return filtered.slice(0, maxItems).map(a => ({ ...a, category }))
 }
 
 export async function fetchTrendingTopics(): Promise<Article[]> {
