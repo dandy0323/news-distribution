@@ -178,10 +178,31 @@ function buildArticles(
   })
 }
 
-// 信頼メディア＋時系列の二段階フィルタ
-// 優先順: 信頼×7日 → 信頼×30日 → 信頼×全期間 → 全ソース×7日 → 全件
-function applyFilters(all: Article[], maxItems: number): Article[] {
+// 信頼メディア＋時系列の二段階フィルタ（dateFrom/dateTo が指定された場合はその範囲を使用）
+function applyFilters(all: Article[], maxItems: number, dateFrom?: Date, dateTo?: Date): Article[] {
+  const inRange = (a: Article) => {
+    if (!dateFrom && !dateTo) return true
+    try {
+      const pub = new Date(a.publishedAt).getTime()
+      if (dateFrom && pub < dateFrom.getTime()) return false
+      if (dateTo && pub > dateTo.getTime()) return false
+      return true
+    } catch { return true }
+  }
+
+  // 日付範囲が明示指定された場合はそれを優先
+  if (dateFrom || dateTo) {
+    const ranged = all.filter(a => inRange(a))
+    const trustedRanged = ranged.filter(a => isTrustedSource(a.source))
+    const result = trustedRanged.length >= 3 ? trustedRanged : ranged
+    return result.slice(0, maxItems)
+  }
+
+  // デフォルト: 直近3日 → 7日 → 30日 → 全期間の順でフォールバック
   const trusted = all.filter(a => isTrustedSource(a.source))
+  const trusted3 = trusted.filter(a => isWithinDays(a.publishedAt, 3))
+  if (trusted3.length >= 3) return trusted3.slice(0, maxItems)
+
   const trusted7 = trusted.filter(a => isWithinDays(a.publishedAt, 7))
   if (trusted7.length >= 3) return trusted7.slice(0, maxItems)
 
@@ -190,31 +211,30 @@ function applyFilters(all: Article[], maxItems: number): Article[] {
 
   if (trusted.length >= 3) return trusted.slice(0, maxItems)
 
-  // 信頼メディアが足りなければ時系列のみで絞る
-  const recent7 = all.filter(a => isWithinDays(a.publishedAt, 7))
-  if (recent7.length >= 3) return recent7.slice(0, maxItems)
+  const recent3 = all.filter(a => isWithinDays(a.publishedAt, 3))
+  if (recent3.length >= 3) return recent3.slice(0, maxItems)
 
   return all.slice(0, maxItems)
 }
 
-export async function fetchNewsByKeyword(keyword: string, maxItems = 20): Promise<Article[]> {
+export async function fetchNewsByKeyword(keyword: string, maxItems = 20, dateFrom?: Date, dateTo?: Date): Promise<Article[]> {
   const feedUrl = buildGoogleNewsUrl(keyword)
   try {
     const feed = await parser.parseURL(feedUrl)
-    const items = (feed.items ?? []).slice(0, 60) as (Parser.Item & { source?: { _?: string } })[]
+    const items = (feed.items ?? []).slice(0, 60) as RssItem[]
     const rawUrls = items.map(item => item.link ?? '')
     const resolvedUrls = await resolveUrls(rawUrls)
     const all = buildArticles(items, resolvedUrls, feedUrl, keyword)
-    return applyFilters(all, maxItems)
+    return applyFilters(all, maxItems, dateFrom, dateTo)
   } catch (err) {
     console.error('[fetchNewsByKeyword]', err)
     return []
   }
 }
 
-export async function fetchNewsByCategory(category: Exclude<Category, 'すべて'>, maxItems = 20): Promise<Article[]> {
+export async function fetchNewsByCategory(category: Exclude<Category, 'すべて'>, maxItems = 20, dateFrom?: Date, dateTo?: Date): Promise<Article[]> {
   const query = CATEGORY_QUERY_MAP[category]
-  const articles = await fetchNewsByKeyword(query, maxItems * 2)
+  const articles = await fetchNewsByKeyword(query, maxItems * 2, dateFrom, dateTo)
   const filtered = category === '経済'
     ? articles
     : articles.filter(a => !isFinancialNoise(a))
