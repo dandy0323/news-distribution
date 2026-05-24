@@ -2,7 +2,14 @@ import { NextRequest, NextResponse } from 'next/server'
 import { generateSummary, analyzeReportingTrends, generateTopicHistory } from '@/lib/gemini'
 import { Article } from '@/types'
 
+// Vercel Hobby プランの最大実行時間を延長（デフォルト10秒 → 30秒）
+export const maxDuration = 30
+
 export async function POST(req: NextRequest) {
+  if (!process.env.GEMINI_API_KEY) {
+    return NextResponse.json({ error: 'GEMINI_API_KEY が Vercel に設定されていません' }, { status: 500 })
+  }
+
   try {
     const body = await req.json() as { keyword: string; articles: Article[]; type: 'summary' | 'trends' | 'history' }
     const { keyword, articles, type } = body
@@ -24,7 +31,8 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ result })
   } catch (err) {
-    console.error('[POST /api/ai/summarize]', err)
-    return NextResponse.json({ error: 'AI分析に失敗しました' }, { status: 500 })
+    const message = err instanceof Error ? err.message : String(err)
+    console.error('[POST /api/ai/summarize]', message)
+    return NextResponse.json({ error: message }, { status: 500 })
   }
 }
