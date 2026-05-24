@@ -23,7 +23,6 @@ function buildGoogleNewsUrl(query: string, lang = 'ja', country = 'JP'): string 
 }
 
 function extractSourceFromTitle(title: string): string | null {
-  // Google News titles end with " - 出典元名"
   const parts = title.split(' - ')
   if (parts.length >= 2) return parts[parts.length - 1].trim()
   return null
@@ -41,31 +40,63 @@ function extractSource(feedUrl: string, item: Parser.Item & { source?: { _?: str
   }
 }
 
-function resolveGoogleNewsUrl(rawUrl: string): string {
-  // Google News wraps URLs — return as-is (redirect happens on click)
-  return rawUrl
+// Google News のリダイレクト先（実際の記事URL）を取得する
+async function resolveArticleUrl(url: string): Promise<string> {
+  if (!url.includes('news.google.com')) return url
+  try {
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), 4000)
+    const res = await fetch(url, {
+      redirect: 'follow',
+      signal: controller.signal,
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      },
+    })
+    clearTimeout(timer)
+    // リダイレクト後のURLが元と違えばそちらを返す
+    return res.url !== url ? res.url : url
+  } catch {
+    return url
+  }
+}
+
+// 複数URLを並列解決（失敗分は元URLのまま）
+async function resolveUrls(urls: string[]): Promise<string[]> {
+  return Promise.all(urls.map(resolveArticleUrl))
+}
+
+function buildArticles(
+  items: (Parser.Item & { source?: { _?: string } })[],
+  resolvedUrls: string[],
+  feedUrl: string,
+  prefix: string,
+): Article[] {
+  return items.map((item, i) => {
+    const rawTitle = item.title ?? '(タイトルなし)'
+    const source = extractSource(feedUrl, item)
+    const title = rawTitle.endsWith(` - ${source}`)
+      ? rawTitle.slice(0, -(` - ${source}`).length)
+      : rawTitle
+    return {
+      id: `${prefix}-${i}-${Date.now()}`,
+      title,
+      url: resolvedUrls[i],
+      source,
+      publishedAt: item.pubDate ?? item.isoDate ?? new Date().toISOString(),
+      description: item.contentSnippet ?? item.content ?? '',
+    }
+  })
 }
 
 export async function fetchNewsByKeyword(keyword: string, maxItems = 20): Promise<Article[]> {
   const feedUrl = buildGoogleNewsUrl(keyword)
   try {
     const feed = await parser.parseURL(feedUrl)
-    return (feed.items ?? []).slice(0, maxItems).map((item, i) => {
-      const rawTitle = item.title ?? '(タイトルなし)'
-      const source = extractSource(feedUrl, item as Parser.Item & { source?: { _?: string } })
-      // タイトル末尾の " - 出典元名" を除去
-      const title = rawTitle.endsWith(` - ${source}`)
-        ? rawTitle.slice(0, -(` - ${source}`).length)
-        : rawTitle
-      return {
-        id: `${keyword}-${i}-${Date.now()}`,
-        title,
-        url: resolveGoogleNewsUrl(item.link ?? ''),
-        source,
-        publishedAt: item.pubDate ?? item.isoDate ?? new Date().toISOString(),
-        description: item.contentSnippet ?? item.content ?? '',
-      }
-    })
+    const items = (feed.items ?? []).slice(0, maxItems) as (Parser.Item & { source?: { _?: string } })[]
+    const rawUrls = items.map(item => item.link ?? '')
+    const resolvedUrls = await resolveUrls(rawUrls)
+    return buildArticles(items, resolvedUrls, feedUrl, keyword)
   } catch (err) {
     console.error('[fetchNewsByKeyword]', err)
     return []
@@ -82,21 +113,10 @@ export async function fetchTrendingTopics(): Promise<Article[]> {
   const feedUrl = `https://news.google.com/rss?hl=ja&gl=JP&ceid=JP:ja`
   try {
     const feed = await parser.parseURL(feedUrl)
-    return (feed.items ?? []).slice(0, 30).map((item, i) => {
-      const rawTitle = item.title ?? '(タイトルなし)'
-      const source = extractSource(feedUrl, item as Parser.Item & { source?: { _?: string } })
-      const title = rawTitle.endsWith(` - ${source}`)
-        ? rawTitle.slice(0, -(` - ${source}`).length)
-        : rawTitle
-      return {
-        id: `trending-${i}-${Date.now()}`,
-        title,
-        url: resolveGoogleNewsUrl(item.link ?? ''),
-        source,
-        publishedAt: item.pubDate ?? item.isoDate ?? new Date().toISOString(),
-        description: item.contentSnippet ?? '',
-      }
-    })
+    const items = (feed.items ?? []).slice(0, 30) as (Parser.Item & { source?: { _?: string } })[]
+    const rawUrls = items.map(item => item.link ?? '')
+    const resolvedUrls = await resolveUrls(rawUrls)
+    return buildArticles(items, resolvedUrls, feedUrl, 'trending')
   } catch (err) {
     console.error('[fetchTrendingTopics]', err)
     return []

@@ -1,5 +1,5 @@
 import { GoogleGenAI } from '@google/genai'
-import { Article, ReportingTrend, TopicHistory, ChatMessage } from '@/types'
+import { Article, ReportingTrend, TopicHistory, OutlookItem, ChatMessage } from '@/types'
 
 function getClient() {
   const apiKey = process.env.GEMINI_API_KEY
@@ -70,16 +70,22 @@ export async function generateTopicHistory(keyword: string, articles: Article[])
 {
   "timeline": [
     {
-      "date": "yyyy/m/d(aaa) 形式の日付。時刻が重要な事象（犯行時刻・発表時刻など）は yyyy/m/d(aaa) HH:MM も可",
+      "date": "yyyy/m/d(aaa) 形式。犯行・会見など時刻が重要な場合は yyyy/m/d(aaa) HH:MM も可",
       "event": "その日の出来事を80字以内で具体的に記述",
-      "url": "その経緯に最も関連する記事のURLを1つ（記事一覧のURLから選択。不明な場合は省略）"
+      "url": "その経緯に最も関連する記事URLを1つ（下記記事一覧から選択。不明なら省略）"
     }
   ],
   "cause": "事件なら動機、事故なら発生原因、政策なら背景事情を150字以内。不明なら「現時点では詳細不明」",
-  "outlook": "今後予想される展開・対応・影響を150字以内"
+  "scheduleOutlook": [
+    {
+      "date": "今後の具体的な予定日・期日。yyyy/m/d(aaa) 形式",
+      "event": "予定・決定済みの動向を60字以内で記述（確定情報のみ）"
+    }
+  ],
+  "forecastOutlook": "今後の方向性の予測（推測）と、誰・何への影響を200字以内で記述。推測である旨がわかる表現を使うこと"
 }
 
-timelineは5〜8項目、古い順に並べてください。
+timelineは5〜8項目（古い順）。scheduleOutlookは確定している予定のみ（不明な場合は空配列）。
 
 ${articlesToText(articles)}`
 
@@ -88,7 +94,12 @@ ${articlesToText(articles)}`
   try {
     return JSON.parse(text) as TopicHistory
   } catch {
-    return { timeline: [], cause: '解析に失敗しました', outlook: '解析に失敗しました' }
+    return {
+      timeline: [],
+      cause: '解析に失敗しました',
+      scheduleOutlook: [] as OutlookItem[],
+      forecastOutlook: '解析に失敗しました',
+    }
   }
 }
 

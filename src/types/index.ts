@@ -43,10 +43,16 @@ export interface TimelineItem {
   url?: string
 }
 
+export interface OutlookItem {
+  date: string
+  event: string
+}
+
 export interface TopicHistory {
   timeline: TimelineItem[]
   cause: string
-  outlook: string
+  scheduleOutlook: OutlookItem[]
+  forecastOutlook: string
 }
 
 export interface ChatMessage {

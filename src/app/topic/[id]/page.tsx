@@ -18,8 +18,9 @@ import {
   ChevronUp,
   Clock,
   AlertCircle,
-  TrendingUp,
   ExternalLink,
+  CalendarClock,
+  Lightbulb,
 } from 'lucide-react'
 
 type AiSection = 'summary' | 'trends' | 'history'
@@ -239,13 +240,36 @@ export default function TopicPage({ params }: { params: Promise<{ id: string }> 
                 <p className="text-sm text-gray-700 leading-relaxed">{topicHistory.cause}</p>
               </div>
 
-              {/* 今後の見通し */}
+              {/* 今後の予定・動向（事実） */}
+              <div>
+                <p className="flex items-center gap-1.5 text-xs font-bold text-gray-500 uppercase tracking-wide mb-3">
+                  <CalendarClock size={12} />
+                  今後の予定・動向（事実）
+                </p>
+                {topicHistory.scheduleOutlook.length === 0 ? (
+                  <p className="text-sm text-gray-400">確定している予定は現時点では不明</p>
+                ) : (
+                  <ul className="space-y-3">
+                    {topicHistory.scheduleOutlook.map((item, i) => (
+                      <li key={i} className="flex gap-3">
+                        <span className="shrink-0 mt-1.5 w-1.5 h-1.5 rounded-full bg-blue-400" />
+                        <div>
+                          <span className="text-xs font-semibold text-blue-600 mr-2">{item.date}</span>
+                          <span className="text-sm text-gray-700">{item.event}</span>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+
+              {/* 見込み（推測） */}
               <div>
                 <p className="flex items-center gap-1.5 text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">
-                  <TrendingUp size={12} />
-                  今後の見通し
+                  <Lightbulb size={12} />
+                  見込み（推測）
                 </p>
-                <p className="text-sm text-gray-700 leading-relaxed">{topicHistory.outlook}</p>
+                <p className="text-sm text-gray-700 leading-relaxed">{topicHistory.forecastOutlook}</p>
               </div>
             </div>
           )}
