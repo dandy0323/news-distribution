@@ -21,6 +21,7 @@ import {
   ExternalLink,
   CalendarClock,
   Lightbulb,
+  Home,
 } from 'lucide-react'
 
 type AiSection = 'summary' | 'trends' | 'history'
@@ -114,11 +115,14 @@ export default function TopicPage({ params }: { params: Promise<{ id: string }> 
   return (
     <div className="min-h-screen bg-gray-50">
       <header className="bg-white border-b border-gray-200 sticky top-0 z-10">
-        <div className="max-w-2xl mx-auto px-4 py-3 flex items-center gap-3">
-          <button onClick={() => router.back()} className="text-gray-500 hover:text-gray-700">
+        <div className="max-w-2xl mx-auto px-4 py-3 flex items-center gap-2">
+          <button onClick={() => router.back()} className="text-gray-500 hover:text-gray-700 p-1">
             <ChevronLeft size={22} />
           </button>
-          <Newspaper className="text-blue-600 shrink-0" size={20} />
+          <button onClick={() => router.push('/')} className="text-gray-500 hover:text-gray-700 p-1">
+            <Home size={20} />
+          </button>
+          <Newspaper className="text-blue-600 shrink-0 ml-1" size={18} />
           <span className="font-bold text-gray-900 text-base truncate">{titleFromQuery}</span>
         </div>
       </header>

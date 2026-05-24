@@ -66,6 +66,19 @@ async function resolveUrls(urls: string[]): Promise<string[]> {
   return Promise.all(urls.map(resolveArticleUrl))
 }
 
+// キーワードと記事の関連性チェック（日本語・英語対応）
+function isRelevant(article: Article, keyword: string): boolean {
+  // キーワードを2文字以上のトークンに分割（スペース・全角スペース区切り）
+  const tokens = keyword
+    .toLowerCase()
+    .split(/[\s　]+/)
+    .filter(t => t.length >= 2)
+  if (tokens.length === 0) return true
+  const text = `${article.title} ${article.description}`.toLowerCase()
+  // いずれかのトークンが含まれていれば関連ありとみなす
+  return tokens.some(token => text.includes(token))
+}
+
 function buildArticles(
   items: (Parser.Item & { source?: { _?: string } })[],
   resolvedUrls: string[],
@@ -93,10 +106,14 @@ export async function fetchNewsByKeyword(keyword: string, maxItems = 20): Promis
   const feedUrl = buildGoogleNewsUrl(keyword)
   try {
     const feed = await parser.parseURL(feedUrl)
-    const items = (feed.items ?? []).slice(0, maxItems) as (Parser.Item & { source?: { _?: string } })[]
+    // 多めに取得してフィルタ後にmaxItems件に絞る
+    const items = (feed.items ?? []).slice(0, maxItems * 2) as (Parser.Item & { source?: { _?: string } })[]
     const rawUrls = items.map(item => item.link ?? '')
     const resolvedUrls = await resolveUrls(rawUrls)
-    return buildArticles(items, resolvedUrls, feedUrl, keyword)
+    const all = buildArticles(items, resolvedUrls, feedUrl, keyword)
+    const filtered = all.filter(a => isRelevant(a, keyword))
+    // フィルタ後0件になってしまった場合はフィルタなしで返す（カテゴリ検索など英語クエリ対策）
+    return (filtered.length > 0 ? filtered : all).slice(0, maxItems)
   } catch (err) {
     console.error('[fetchNewsByKeyword]', err)
     return []
