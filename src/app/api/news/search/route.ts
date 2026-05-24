@@ -8,8 +8,9 @@ export async function GET(req: NextRequest) {
   const category = searchParams.get('category') as Category | null
   const fromStr = searchParams.get('from')
   const toStr = searchParams.get('to')
-  const dateFrom = fromStr ? new Date(fromStr) : undefined
-  const dateTo = toStr ? (() => { const d = new Date(toStr); d.setHours(23, 59, 59, 999); return d })() : undefined
+  // JST (UTC+9) で解釈：例 '2026-05-22' → 2026-05-22T00:00:00+09:00 〜 2026-05-22T23:59:59+09:00
+  const dateFrom = fromStr ? new Date(fromStr + 'T00:00:00+09:00') : undefined
+  const dateTo = toStr ? new Date(toStr + 'T23:59:59+09:00') : undefined
 
   try {
     if (!keyword && (!category || category === 'すべて')) {

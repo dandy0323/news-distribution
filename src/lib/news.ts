@@ -18,7 +18,7 @@ const CATEGORY_QUERY_MAP: Record<Exclude<Category, 'すべて'>, string> = {
   経済: '経済 景気 日銀 株式市場',
   社会: '社会 事件 事故 裁判',
   テクノロジー: 'テクノロジー AI IT スタートアップ',
-  エンタメ: '芸能 映画 音楽 ドラマ',
+  エンタメ: '芸能ニュース 映画 音楽 ドラマニュース',
   スポーツ: 'スポーツ 野球 サッカー バスケ',
   国際: '国際 外交 海外 米国 中国',
   科学: '科学 研究 宇宙 医療',
@@ -198,7 +198,7 @@ function applyFilters(all: Article[], maxItems: number, dateFrom?: Date, dateTo?
     return result.slice(0, maxItems)
   }
 
-  // デフォルト: 直近3日 → 7日 → 30日 → 全期間の順でフォールバック
+  // デフォルト: 信頼メディア×3日 → 7日 → 30日 → 直近記事（全ソース）→ 信頼メディア全期間 → 全件
   const trusted = all.filter(a => isTrustedSource(a.source))
   const trusted3 = trusted.filter(a => isWithinDays(a.publishedAt, 3))
   if (trusted3.length >= 3) return trusted3.slice(0, maxItems)
@@ -209,10 +209,15 @@ function applyFilters(all: Article[], maxItems: number, dateFrom?: Date, dateTo?
   const trusted30 = trusted.filter(a => isWithinDays(a.publishedAt, 30))
   if (trusted30.length >= 3) return trusted30.slice(0, maxItems)
 
-  if (trusted.length >= 3) return trusted.slice(0, maxItems)
-
+  // 古い信頼メディアより直近記事を優先
   const recent3 = all.filter(a => isWithinDays(a.publishedAt, 3))
   if (recent3.length >= 3) return recent3.slice(0, maxItems)
+
+  const recent7 = all.filter(a => isWithinDays(a.publishedAt, 7))
+  if (recent7.length >= 3) return recent7.slice(0, maxItems)
+
+  // 最終手段: 信頼メディア（古くても）→ 全件
+  if (trusted.length >= 3) return trusted.slice(0, maxItems)
 
   return all.slice(0, maxItems)
 }
