@@ -4,6 +4,7 @@ import { useState, useEffect, use } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import SearchBar from '@/components/ui/SearchBar'
 import ArticleCard from '@/components/ui/ArticleCard'
+import AiChat from '@/components/AiChat'
 import { Article, ReportingTrend, TopicHistory } from '@/types'
 import { addToHistory } from '@/lib/history'
 import {
@@ -18,6 +19,7 @@ import {
   Clock,
   AlertCircle,
   TrendingUp,
+  ExternalLink,
 } from 'lucide-react'
 
 type AiSection = 'summary' | 'trends' | 'history'
@@ -200,15 +202,29 @@ export default function TopicPage({ params }: { params: Promise<{ id: string }> 
             <div className="space-y-4">
               {/* 時系列 */}
               <div>
-                <p className="flex items-center gap-1.5 text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">
+                <p className="flex items-center gap-1.5 text-xs font-bold text-gray-500 uppercase tracking-wide mb-3">
                   <Clock size={12} />
                   時系列
                 </p>
-                <ul className="space-y-1.5">
+                <ul className="space-y-3">
                   {topicHistory.timeline.map((item, i) => (
-                    <li key={i} className="flex gap-2 text-sm text-gray-700">
-                      <span className="shrink-0 mt-1 w-1.5 h-1.5 rounded-full bg-purple-400" />
-                      {item}
+                    <li key={i} className="flex gap-3">
+                      <span className="shrink-0 mt-1.5 w-1.5 h-1.5 rounded-full bg-purple-400" />
+                      <div className="flex-1 min-w-0">
+                        <span className="text-xs font-semibold text-purple-600 mr-2">{item.date}</span>
+                        <span className="text-sm text-gray-700">{item.event}</span>
+                        {item.url && (
+                          <a
+                            href={item.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex items-center gap-1 mt-0.5 text-xs text-blue-500 hover:underline truncate"
+                          >
+                            <ExternalLink size={10} className="shrink-0" />
+                            <span className="truncate">{item.url}</span>
+                          </a>
+                        )}
+                      </div>
                     </li>
                   ))}
                 </ul>
@@ -235,6 +251,9 @@ export default function TopicPage({ params }: { params: Promise<{ id: string }> 
           )}
         </AiCard>
       </main>
+
+      {/* フローティングAIチャット */}
+      <AiChat keyword={keyword} articles={articles} />
     </div>
   )
 }

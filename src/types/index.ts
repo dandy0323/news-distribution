@@ -37,10 +37,21 @@ export interface ReportingTrend {
   summary: string
 }
 
+export interface TimelineItem {
+  date: string
+  event: string
+  url?: string
+}
+
 export interface TopicHistory {
-  timeline: string[]
+  timeline: TimelineItem[]
   cause: string
   outlook: string
+}
+
+export interface ChatMessage {
+  role: 'user' | 'assistant'
+  content: string
 }
 
 export interface AiAnalysis {
