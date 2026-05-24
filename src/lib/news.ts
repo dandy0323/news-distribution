@@ -178,21 +178,28 @@ function buildArticles(
   })
 }
 
-// 信頼メディア＋時系列の二段階フィルタ（dateFrom/dateTo が指定された場合はその範囲を使用）
-function applyFilters(all: Article[], maxItems: number, dateFrom?: Date, dateTo?: Date): Article[] {
+// publishedAt を JST の YYYY-MM-DD 文字列に変換
+function toJstDateStr(publishedAt: string): string {
+  try {
+    const ts = new Date(publishedAt).getTime()
+    if (isNaN(ts)) return ''
+    return new Date(ts + 9 * 60 * 60 * 1000).toISOString().slice(0, 10)
+  } catch { return '' }
+}
+
+// 信頼メディア＋時系列の二段階フィルタ（fromStr/toStr は YYYY-MM-DD in JST）
+function applyFilters(all: Article[], maxItems: number, fromStr?: string, toStr?: string): Article[] {
   const inRange = (a: Article) => {
-    if (!dateFrom && !dateTo) return true
-    try {
-      const pub = new Date(a.publishedAt).getTime()
-      if (dateFrom && pub < dateFrom.getTime()) return false
-      if (dateTo && pub > dateTo.getTime()) return false
-      return true
-    } catch { return true }
+    if (!fromStr && !toStr) return true
+    const pubDate = toJstDateStr(a.publishedAt)
+    if (!pubDate) return true // パース不能な日付は含める
+    if (fromStr && pubDate < fromStr) return false
+    if (toStr && pubDate > toStr) return false
+    return true
   }
 
-  // 日付範囲が明示指定された場合はその範囲内のみ返す（0件なら空を返す）
-  if (dateFrom || dateTo) {
-    const ranged = all.filter(a => inRange(a))
+  if (fromStr || toStr) {
+    const ranged = all.filter(inRange)
     const trustedRanged = ranged.filter(a => isTrustedSource(a.source))
     const result = trustedRanged.length >= 3 ? trustedRanged : ranged
     return result.slice(0, maxItems)
@@ -222,7 +229,7 @@ function applyFilters(all: Article[], maxItems: number, dateFrom?: Date, dateTo?
   return all.slice(0, maxItems)
 }
 
-export async function fetchNewsByKeyword(keyword: string, maxItems = 20, dateFrom?: Date, dateTo?: Date): Promise<Article[]> {
+export async function fetchNewsByKeyword(keyword: string, maxItems = 20, fromStr?: string, toStr?: string): Promise<Article[]> {
   const feedUrl = buildGoogleNewsUrl(keyword)
   try {
     const feed = await parser.parseURL(feedUrl)
@@ -230,23 +237,23 @@ export async function fetchNewsByKeyword(keyword: string, maxItems = 20, dateFro
     const rawUrls = items.map(item => item.link ?? '')
     const resolvedUrls = await resolveUrls(rawUrls)
     const all = buildArticles(items, resolvedUrls, feedUrl, keyword)
-    return applyFilters(all, maxItems, dateFrom, dateTo)
+    return applyFilters(all, maxItems, fromStr, toStr)
   } catch (err) {
     console.error('[fetchNewsByKeyword]', err)
     return []
   }
 }
 
-export async function fetchNewsByCategory(category: Exclude<Category, 'すべて'>, maxItems = 20, dateFrom?: Date, dateTo?: Date): Promise<Article[]> {
+export async function fetchNewsByCategory(category: Exclude<Category, 'すべて'>, maxItems = 20, fromStr?: string, toStr?: string): Promise<Article[]> {
   const query = CATEGORY_QUERY_MAP[category]
-  const articles = await fetchNewsByKeyword(query, maxItems * 2, dateFrom, dateTo)
+  const articles = await fetchNewsByKeyword(query, maxItems * 2, fromStr, toStr)
   const filtered = category === '経済'
     ? articles
     : articles.filter(a => !isFinancialNoise(a))
   return filtered.slice(0, maxItems).map(a => ({ ...a, category }))
 }
 
-export async function fetchTrendingTopics(dateFrom?: Date, dateTo?: Date): Promise<Article[]> {
+export async function fetchTrendingTopics(fromStr?: string, toStr?: string): Promise<Article[]> {
   const feedUrl = `https://news.google.com/rss?hl=ja&gl=JP&ceid=JP:ja`
   try {
     const feed = await parser.parseURL(feedUrl)
@@ -254,7 +261,7 @@ export async function fetchTrendingTopics(dateFrom?: Date, dateTo?: Date): Promi
     const rawUrls = items.map(item => item.link ?? '')
     const resolvedUrls = await resolveUrls(rawUrls)
     const all = buildArticles(items, resolvedUrls, feedUrl, 'trending')
-    return applyFilters(all, 30, dateFrom, dateTo)
+    return applyFilters(all, 30, fromStr, toStr)
   } catch (err) {
     console.error('[fetchTrendingTopics]', err)
     return []

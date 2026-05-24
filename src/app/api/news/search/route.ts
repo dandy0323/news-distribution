@@ -6,26 +6,24 @@ export async function GET(req: NextRequest) {
   const { searchParams } = req.nextUrl
   const keyword = searchParams.get('q')?.trim()
   const category = searchParams.get('category') as Category | null
-  const fromStr = searchParams.get('from')
-  const toStr = searchParams.get('to')
-  // JST (UTC+9) で解釈：例 '2026-05-22' → 2026-05-22T00:00:00+09:00 〜 2026-05-22T23:59:59+09:00
-  const dateFrom = fromStr ? new Date(fromStr + 'T00:00:00+09:00') : undefined
-  const dateTo = toStr ? new Date(toStr + 'T23:59:59+09:00') : undefined
+  // YYYY-MM-DD 文字列のままフィルタ関数に渡す（JST日付文字列比較）
+  const fromStr = searchParams.get('from') ?? undefined
+  const toStr = searchParams.get('to') ?? undefined
 
   try {
     if (!keyword && (!category || category === 'すべて')) {
-      const articles = await fetchTrendingTopics(dateFrom, dateTo)
+      const articles = await fetchTrendingTopics(fromStr, toStr)
       return NextResponse.json({ articles })
     }
 
     if (keyword) {
       const query = category && category !== 'すべて' ? `${keyword} ${category}` : keyword
-      const articles = await fetchNewsByKeyword(query, 20, dateFrom, dateTo)
+      const articles = await fetchNewsByKeyword(query, 20, fromStr, toStr)
       return NextResponse.json({ articles })
     }
 
     if (category && category !== 'すべて') {
-      const articles = await fetchNewsByCategory(category as Exclude<Category, 'すべて'>, 20, dateFrom, dateTo)
+      const articles = await fetchNewsByCategory(category as Exclude<Category, 'すべて'>, 20, fromStr, toStr)
       return NextResponse.json({ articles })
     }
 
