@@ -7,7 +7,7 @@ function getClient() {
   return new GoogleGenAI({ apiKey })
 }
 
-const MODEL = 'gemini-2.0-flash'
+const MODEL = 'gemini-2.5-flash'
 
 function articlesToText(articles: Article[]): string {
   return articles
