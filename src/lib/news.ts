@@ -190,15 +190,12 @@ function applyFilters(all: Article[], maxItems: number, dateFrom?: Date, dateTo?
     } catch { return true }
   }
 
-  // 日付範囲が明示指定された場合はそれを優先
+  // 日付範囲が明示指定された場合はその範囲内のみ返す（0件なら空を返す）
   if (dateFrom || dateTo) {
     const ranged = all.filter(a => inRange(a))
-    if (ranged.length > 0) {
-      const trustedRanged = ranged.filter(a => isTrustedSource(a.source))
-      const result = trustedRanged.length >= 3 ? trustedRanged : ranged
-      return result.slice(0, maxItems)
-    }
-    // 指定範囲に記事がなければ以降のカスケードへフォールスルー
+    const trustedRanged = ranged.filter(a => isTrustedSource(a.source))
+    const result = trustedRanged.length >= 3 ? trustedRanged : ranged
+    return result.slice(0, maxItems)
   }
 
   // デフォルト: 直近3日 → 7日 → 30日 → 全期間の順でフォールバック
