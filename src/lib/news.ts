@@ -55,6 +55,7 @@ const TRUSTED_SOURCE_PATTERNS = [
   'nbc',
   'abc news',
   'fox news',
+  'axios',
 ]
 
 function isTrustedSource(source: string): boolean {
