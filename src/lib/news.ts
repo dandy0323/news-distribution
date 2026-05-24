@@ -40,7 +40,6 @@ function extractSource(feedUrl: string, item: Parser.Item & { source?: { _?: str
   }
 }
 
-// Google News のリダイレクト先（実際の記事URL）を取得する
 async function resolveArticleUrl(url: string): Promise<string> {
   if (!url.includes('news.google.com')) return url
   try {
@@ -54,30 +53,25 @@ async function resolveArticleUrl(url: string): Promise<string> {
       },
     })
     clearTimeout(timer)
-    // リダイレクト後のURLが元と違えばそちらを返す
     return res.url !== url ? res.url : url
   } catch {
     return url
   }
 }
 
-// 複数URLを並列解決（失敗分は元URLのまま）
 async function resolveUrls(urls: string[]): Promise<string[]> {
   return Promise.all(urls.map(resolveArticleUrl))
 }
 
-// キーワードと記事タイトルの関連性チェック
-// 3文字以上の部分文字列がタイトルに1つでも含まれれば「関連あり」とみなす。
-// スペースなしの日本語キーワード（記事タイトルそのものなど）にも対応。
-function isRelevant(article: Article, keyword: string): boolean {
-  const k = keyword.toLowerCase()
-  const title = article.title.toLowerCase()
-  const WINDOW = 3
-  if (k.length < WINDOW) return true
-  for (let i = 0; i <= k.length - WINDOW; i++) {
-    if (title.includes(k.slice(i, i + WINDOW))) return true
+// 記事が直近N日以内かチェック
+function isWithinDays(publishedAt: string, days: number): boolean {
+  try {
+    const pub = new Date(publishedAt).getTime()
+    const cutoff = Date.now() - days * 24 * 60 * 60 * 1000
+    return pub >= cutoff
+  } catch {
+    return true
   }
-  return false
 }
 
 function buildArticles(
@@ -107,14 +101,15 @@ export async function fetchNewsByKeyword(keyword: string, maxItems = 20): Promis
   const feedUrl = buildGoogleNewsUrl(keyword)
   try {
     const feed = await parser.parseURL(feedUrl)
-    // Google NewsのRSS上限は通常100件。多めに取得してフィルタ後にmaxItems件確保する
-    const items = (feed.items ?? []).slice(0, 100) as (Parser.Item & { source?: { _?: string } })[]
+    const items = (feed.items ?? []).slice(0, 60) as (Parser.Item & { source?: { _?: string } })[]
     const rawUrls = items.map(item => item.link ?? '')
     const resolvedUrls = await resolveUrls(rawUrls)
     const all = buildArticles(items, resolvedUrls, feedUrl, keyword)
-    const filtered = all.filter(a => isRelevant(a, keyword))
-    // フィルタ後に極端に少ない場合はフィルタなしにフォールバック（英語クエリ等の対策）
-    const result = filtered.length >= 5 ? filtered : all
+
+    // 直近7日以内の記事を優先。5件未満なら30日に自動拡張、それでも足りなければ全件
+    const week = all.filter(a => isWithinDays(a.publishedAt, 7))
+    const month = all.filter(a => isWithinDays(a.publishedAt, 30))
+    const result = week.length >= 5 ? week : month.length > 0 ? month : all
     return result.slice(0, maxItems)
   } catch (err) {
     console.error('[fetchNewsByKeyword]', err)
